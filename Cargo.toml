@@ -7,6 +7,7 @@ description = "example compiler tool which produces some not very useful stats"
 repository = "https://github.com/nick29581/stupid-stats"
 readme = "README.md"
 license = "Apache-2.0/MIT"
+edition = "2018"
 
 [[bin]]
 name = "stupid"
