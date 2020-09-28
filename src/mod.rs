@@ -5,12 +5,13 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-
 #![feature(rustc_private)]
+#![feature(cell_leak)]
 
 extern crate rustc_driver;
 extern crate rustc_interface;
 extern crate rustc_span;
+extern crate rustc_hir;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
 extern crate rustc_attr;
@@ -67,29 +68,43 @@ impl Callbacks for StupidCalls {
         _compiler: &Compiler,
         queries: &'tcx Queries<'tcx>,
     ) -> Compilation {
-        // `Queries::parse` gives us access to a `Result<Query<Crate>>` which is exactly what
-        // our ast `Visitor` needs.
-        let krate = queries.parse().expect("no Result<Query<Crate>> found").take();
-        // ...and walks the AST, collecting stats.
-        let mut visitor = StupidVisitor::new();
-        visit::walk_crate(&mut visitor, &krate);
-        // And finally prints out the stupid stats that we collected.
-        let crate_name = match rustc_attr::find_crate_name(&krate.attrs) {
-            Some(name) => name.to_string(),
-            None => String::from("unknown_crate"),
-        };
-        println!("In crate: {},\n", crate_name);
-        println!("Found {} uses of `println!`;", visitor.println_count);
-
-        let (common, common_percent, four_percent) = visitor.compute_arg_stats();
-        println!(
-            "The most common number of arguments is {} ({:.0}% of all functions);",
-            common, common_percent
-        );
-        println!(
-            "{:.0}% of functions have four or more arguments.",
-            four_percent
-        );
+	let qr = &mut *queries.global_ctxt().unwrap().peek_mut();
+	qr.enter(|tcx| {
+	    for (_, item) in &tcx.hir().krate().items {
+                //println!("{:?}", item.kind);
+                //println!("--------------------------------------------");
+                match item.kind {
+                    rustc_hir::ItemKind::Fn(_, _, _) => {
+                        let name = item.ident;
+                        let ty = tcx.type_of(tcx.hir().local_def_id(item.hir_id));
+                        println!("{:?}:\t{:?}", name, ty);
+                    },
+		    rustc_hir::ItemKind::Impl{
+			unsafety: _,
+			polarity: _,
+			defaultness: _,
+			defaultness_span: _,
+			constness: _,
+			generics: _,
+			of_trait: _,
+			self_ty: _,
+			items: itms,
+		    } => {
+			for itm in itms {
+			    match itm.kind {
+				rustc_hir::AssocItemKind::Fn {has_self: has_self} => {
+				    let name = item.ident;
+				    let ty = tcx.type_of(tcx.hir().local_def_id(itm.id.hir_id));
+				    println!("{:?}:\t{:?}", name, ty);
+				},
+				_ => {},
+			    }
+			}
+		    },
+                    _ => (),
+                }
+            }
+	});
 
         Compilation::Continue
     }
